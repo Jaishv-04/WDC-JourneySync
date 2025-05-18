@@ -17,11 +17,24 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Session configuration
 app.use(session({
-  secret: process.env.SESSION_SECRET,
+  secret: process.env.SESSION_SECRET || 'fallback_secret_for_development',
   resave: false,
   saveUninitialized: false,
-  store: new SequelizeStore({ db: sequelize }),
+  store: new SequelizeStore({ 
+    db: sequelize,
+    tableName: 'sessions',
+    expirationTime: 24 * 60 * 60 * 1000  // expires after 1 day
+  }),
+  cookie: {
+    maxTime: 24 * 60 * 60 * 1000,  // expires after 1 day
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production'  // Use secure cookies in production
+  }
 }));
+
+// Initialize Sequelize Store
+const sessionStore = new SequelizeStore({ db: sequelize });
+sessionStore.sync();
 
 // Passport initialization
 app.use(passport.initialize());
@@ -44,7 +57,11 @@ app.get('/', (req, res) => {
 });
 
 // Sync database and start server
-sequelize.sync().then(() => {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-});
+sequelize.sync()
+  .then(() => {
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  })
+  .catch(err => {
+    console.error('Unable to connect to the database:', err);
+  });
